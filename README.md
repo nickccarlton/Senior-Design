@@ -1,4 +1,6 @@
-Team members: Nick Carlton, Joe Liptock, Bob Barnett, Silas Stevens, and Ju Lee. Mentor: Michael Goryll. TA: Adhitya Bharadwaj Sriram.
+Team members: Nick Carlton, Joe Liptock, Bob Barnett, Silas Stevens, and Ju Lee. 
+Mentor: Michael Goryll. 
+TA: Adhitya Bharadwaj Sriram.
 
 Because current guitar pedals are expensive, inflexible, or difficult-to-adjust in real-time, we are developing a low-cost guitar pedal with modular I/O/controls panels and reconfigurable core.
 
