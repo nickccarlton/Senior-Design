@@ -1,3 +1,8 @@
+//Add docstring then git bash exec
+//./helper.py copy seed/Senior-Design-Project-2 
+//		  --source seed/Senior-Design-Project
+//from ..
+
 #include "daisysp.h"
 #include "daisy_seed.h"
 #include "hid/encoder.h"
