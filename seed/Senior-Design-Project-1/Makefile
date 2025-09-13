@@ -1,8 +1,8 @@
 # Project Name
-TARGET = Senior-Design-Project
+TARGET = Senior-Design-Project-1
 
 # Sources
-CPP_SOURCES = Senior-Design-Project.cpp
+CPP_SOURCES = Senior-Design-Project-1.cpp
 
 # Library Locations
 LIBDAISY_DIR = ../../libDaisy/

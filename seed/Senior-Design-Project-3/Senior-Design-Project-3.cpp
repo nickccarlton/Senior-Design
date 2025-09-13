@@ -1,7 +1,7 @@
-//Add docstring then git bash exec
-//./helper.py copy seed/Senior-Design-Project-2 
-//		  --source seed/Senior-Design-Project
-//from ..
+/*
+This FX chain is our "Spacious" chain which processes raw_in using digital (d_) and analog (a_) FX in the following signal path:
+raw_in -> a_preamp -> d_gate -> d_reverb -> a_distortion -> processed_out.
+*/
 
 #include "daisysp.h"
 #include "daisy_seed.h"
@@ -114,6 +114,6 @@ int main(void){
  	hw.StartAudio(AudioCallback);
  
 	while(1){
-		//do nothing/////123
+		//do nothing
 	}
 }
