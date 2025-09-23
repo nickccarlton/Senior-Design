@@ -46,7 +46,7 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer in,
     // === Audio processing ===
     for(size_t i = 0; i < size; i += 2)
     {
-        float dry = in[i];  // left channel
+        float dry = in[i];  // Audio input
 
         chorus.Process(dry);
 
