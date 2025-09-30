@@ -6,7 +6,6 @@ using namespace daisysp;
 
 DaisySeed  hw;
 Overdrive  drive;
-Oscillator osc, lfo;
 
 void AudioCallback(AudioHandle::InputBuffer  in,
                    AudioHandle::OutputBuffer out,
@@ -14,9 +13,10 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 {
     for(size_t i = 0; i < size; i++)
     {
-        drive.SetDrive(fabsf(lfo.Process()));
-        float sig = drive.Process(osc.Process());
-        out[0][i] = out[1][i] = sig;
+        float input = in[0][i];  
+        float sig   = drive.Process(input);
+        out[0][i] = sig;
+        out[1][i] = sig;
     }
 }
 
@@ -25,14 +25,11 @@ int main(void)
     hw.Configure();
     hw.Init();
     hw.SetAudioBlockSize(4);
-    float sample_rate = hw.AudioSampleRate();
 
-    osc.Init(sample_rate);
-    lfo.Init(sample_rate);
-    lfo.SetAmp(.8f);
-    lfo.SetWaveform(Oscillator::WAVE_TRI);
-    lfo.SetFreq(.25f);
-
+    // Overdrive 세팅
+    drive.Init();           // 샘플레이트 필요 없음
+    drive.SetDrive(0.7f);   // 원하는 드라이브 강도 설정
+    
     hw.StartAudio(AudioCallback);
     while(1) {}
 }
