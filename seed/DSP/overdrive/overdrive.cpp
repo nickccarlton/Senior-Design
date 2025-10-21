@@ -26,9 +26,9 @@ int main(void)
     hw.Init();
     hw.SetAudioBlockSize(4);
 
-    
-    drive.Init();           
-    drive.SetDrive(0.7f);   
+   //overdrive setting 
+    drive.Init(); // drive          
+    drive.SetDrive(0.7f);   // how much strong
     
     hw.StartAudio(AudioCallback);
     while(1) {}
