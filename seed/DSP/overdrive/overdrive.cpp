@@ -26,9 +26,9 @@ int main(void)
     hw.Init();
     hw.SetAudioBlockSize(4);
 
-    // Overdrive 세팅
-    drive.Init();           // 샘플레이트 필요 없음
-    drive.SetDrive(0.7f);   // 원하는 드라이브 강도 설정
+    
+    drive.Init();           
+    drive.SetDrive(0.7f);   
     
     hw.StartAudio(AudioCallback);
     while(1) {}
