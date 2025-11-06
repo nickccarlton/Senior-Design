@@ -2,6 +2,7 @@
 #include "daisy_seed.h"
 #include "hid/encoder.h"
 #include "hid/switch.h"
+#include "hid/limiter.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -24,3 +25,4 @@ static Switch sw_comp_on;   // Switch 3: Compressor on/off
 // Effects //
 static Compressor comp;
 static ReverbSc   verb;
+static daisysp::Limiter limiter;
