@@ -13,7 +13,9 @@
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/../../libDaisy//**",
                 "${workspaceFolder}/../../DaisySP//**",
-                "C:/Users/jmkin/Desktop/New folder (2)/Senior-Design/DaisySP/Source"
+                "C:/Users/jmkin/Desktop/New folder (2)/Senior-Design/DaisySP/Source",
+                "C:/Users/jmkin/Desktop/New folder (2)/Senior-Design/DaisySP/Source/Utility",
+                "C:/Users/jmkin/Desktop/New folder (2)/Senior-Design/DaisySP/Source/Dynamics"
             ],
             "name": "Win32",
             "windowsSdkVersion": "10.0.17763.0"

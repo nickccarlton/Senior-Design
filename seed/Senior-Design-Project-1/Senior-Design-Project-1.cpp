@@ -2,6 +2,7 @@
 #include "daisy_seed.h"
 #include "hid/encoder.h"
 #include "hid/switch.h"
+#include "hid/limiter.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -27,6 +28,7 @@ static Compressor comp;
 static Svf        lpf;
 static Overdrive  drive;
 static ReverbSc   verb;
+static daisysp::Limiter limiter;
 
 // Parameters 
 inline float clampf(float x, float lo, float hi)
@@ -48,8 +50,8 @@ const float LPF_STEP_HZ   = 100.0f; // 100 Hz per tick
 
 // --- Overdrive (Encoder 3)
 float       drive_amt     = 0.4f;
-const float DRIVE_MIN     = 0.0f;
-const float DRIVE_MAX     = 0.5f;
+const float DRIVE_MIN     = 0.1f;
+const float DRIVE_MAX     = 0.4f;
 const float DRIVE_STEP    = 0.05f; // 0.05 per tick
 
 // --- Reverb feedback (Encoder 2)
@@ -148,6 +150,12 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
         }
 
         out[i]     = outL;
+        out[i] = outR;
+ // 5) Limiter 
+        limiter.ProcessBlock(&outL, 1, 1.0f);
+        limiter.ProcessBlock(&outR, 1, 1.0f);
+
+        out[i]     = outL;
         out[i + 1] = outR;
     }
 }
@@ -181,6 +189,7 @@ int main(void)
     verb.Init(sr);
     verb.SetFeedback(verb_fb);
     verb.SetLpFreq(18000.0f);
+     limiter.Init();
 
     // Controls init
     // Encoders:
