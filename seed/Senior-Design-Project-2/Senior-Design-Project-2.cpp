@@ -1,126 +1,85 @@
-/*
-This FX chain is our "SparkleClean" chain which processes raw_in using digital (d_) and analog (a_) FX to output processed_out in the following signal path:
-raw_in -> a_preamp -> d_chorus -> d_cabinet model -> a_distortion -> processed_out.
-*/
+// master_toggle_test.cpp
 #include "daisy_seed.h"
 #include "daisysp.h"
 #include "hid/encoder.h"
-#include "hid/switch.h"
 
 using namespace daisy;
 using namespace daisysp;
 
 static DaisySeed hw;
 
-// === Chorus ===
-static Chorus chorus;
+// Controls
+static Encoder enc1; // A,B,Click
 
-// === Encoders ===
-// enc1: Depth, enc2: SetLfoFrequency, enc3: SetDelayMs
-static Encoder enc1;
-static Encoder enc2;
-static Encoder enc3;
+// Effects
+static ReverbSc verb;
+static Chorus   chorus;
 
-// === Switch ===
-// switch  Chorus Feedback  low/high
-static Switch sw_fb;
+// State
+static bool use_chorus = false; // false=Reverb, true=Chorus
 
-// === Parameters ===
-inline float clampf(float x, float lo, float hi)
-{
-    return x < lo ? lo : (x > hi ? hi : x);
-}
-inline float ms_to_s(float ms) { return ms * 0.001f; }
-
-// Depth (0.0 ~ 2.0)
-float depthL = 1.0f, depthR = 1.0f;
-const float DEPTH_MIN = 0.0f, DEPTH_MAX = 2.0f, DEPTH_STEP = 0.1f;
-
-// LFO Frequency (Hz)
-float lfoL = 0.25f, lfoR = 0.30f;
-const float LFO_MIN = 0.05f, LFO_MAX = 5.0f, LFO_STEP = 0.1f;
-
-// SetDelayMs
-float delayMsL = 8.0f, delayMsR = 9.0f;
-const float DMS_MIN = 2.0f, DMS_MAX = 25.0f, DMS_STEP = 0.5f;
-
-// Feedback presets
-const float FB_LOW  = 0.06f;
-const float FB_HIGH = 0.22f;
-
-static void AudioCallback(AudioHandle::InterleavingInputBuffer in,
+static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
                           AudioHandle::InterleavingOutputBuffer out,
-                          size_t size)
+                          size_t                                size)
 {
-    // === Controls ===
+    // --- Read click (once per block) ---
     enc1.Debounce();
-    enc2.Debounce();
-    enc3.Debounce();
-    sw_fb.Debounce();
+    if(enc1.RisingEdge())
+        use_chorus = !use_chorus;
 
-    // Encoder 1: Depth
-    int inc1 = enc1.Increment();
-    if(inc1)
-    {
-        depthL = clampf(depthL + inc1 * DEPTH_STEP, DEPTH_MIN, DEPTH_MAX);
-        depthR = clampf(depthR + inc1 * DEPTH_STEP, DEPTH_MIN, DEPTH_MAX);
-        chorus.SetLfoDepth(depthL, depthR);
-    }
-
-    // Encoder 2: LFO Freq
-    int inc2 = enc2.Increment();
-    if(inc2)
-    {
-        lfoL = clampf(lfoL + inc2 * LFO_STEP, LFO_MIN, LFO_MAX);
-        lfoR = clampf(lfoR + inc2 * LFO_STEP, LFO_MIN, LFO_MAX);
-        chorus.SetLfoFreq(lfoL, lfoR);
-    }
-
-    // Encoder 3: Delay 
-    int inc3 = enc3.Increment();
-    if(inc3)
-    {
-        delayMsL = clampf(delayMsL + inc3 * DMS_STEP, DMS_MIN, DMS_MAX);
-        delayMsR = clampf(delayMsR + inc3 * DMS_STEP, DMS_MIN, DMS_MAX);
-        chorus.SetDelay(ms_to_s(delayMsL), ms_to_s(delayMsR));
-    }
-
-    // Switch: Feedback preset (OFF=low, ON=high)
-    chorus.SetFeedback(sw_fb.Pressed() ? FB_HIGH : FB_LOW);
-
-    // === Audio processing ===
+    // --- Audio ---
     for(size_t i = 0; i < size; i += 2)
     {
-        float dryL = in[i]; // output 
-        chorus.Process(dryL);
-        out[i]     = chorus.GetLeft();
-        out[i + 1] = chorus.GetRight();
+        float inL = in[i];
+        float inR = in[i + 1];
+        float outL, outR;
+
+        if(use_chorus)
+        {
+            // Chorus: mono in -> stereo out
+            float dry = 0.5f * (inL + inR);
+            chorus.Process(dry);
+            outL = chorus.GetLeft();
+            outR = chorus.GetRight();
+        }
+        else
+        {
+            // Reverb: stereo in -> stereo out (with simple wet/dry)
+            float wetL, wetR;
+            verb.Process(inL, inR, &wetL, &wetR);
+            const float mix = 0.35f; // adjust to taste
+            outL = (1.0f - mix) * inL + mix * wetL;
+            outR = (1.0f - mix) * inR + mix * wetR;
+        }
+
+        out[i]     = outL;
+        out[i + 1] = outR;
     }
 }
 
 int main(void)
 {
+    // --- Hardware ---
     hw.Configure();
     hw.Init();
     hw.SetAudioBlockSize(4);
-    float sample_rate = hw.AudioSampleRate();
+    const float sr = hw.AudioSampleRate();
 
-    // Chorus init 
-    chorus.Init(sample_rate);
-    chorus.SetLfoFreq(lfoL, lfoR);
-    chorus.SetLfoDepth(depthL, depthR);
-    chorus.SetDelay(ms_to_s(delayMsL), ms_to_s(delayMsR));
-    chorus.SetFeedback(FB_LOW);
+    // --- Effects init ---
+    verb.Init(sr);
+    verb.SetFeedback(0.75f);
+    verb.SetLpFreq(18000.0f);
 
-    
-    // enc pin
-    enc1.Init(hw.GetPin(1), hw.GetPin(2), Pin()); // Depth
-    enc2.Init(hw.GetPin(3), hw.GetPin(4), Pin()); // LFO Freq
-    enc3.Init(hw.GetPin(5), hw.GetPin(6), Pin()); // Delay
+    chorus.Init(sr);
+    chorus.SetLfoFreq(0.33f, 0.20f);
+    chorus.SetLfoDepth(1.0f, 1.0f);
+    chorus.SetDelay(0.75f, 0.90f);
 
-    //switch pin
-    sw_fb.Init(hw.GetPin(26));
+    // --- Encoder init (A, B, Click) ---
+    // !!! Replace pins to match your wiring !!!
+    enc1.Init(hw.GetPin(1), hw.GetPin(2), hw.GetPin(7));
 
+    // --- Start audio ---
     hw.StartAudio(AudioCallback);
-    while(1) {}
+    while(1) { System::Delay(1); }
 }
