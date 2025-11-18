@@ -5,8 +5,10 @@ TARGET = Senior-Design-Project-3
 USE_DAISYSP_LGPL=1
 
 # Sources
-CPP_SOURCES = Senior-Design-Project-3.cpp
-
+CPP_SOURCES = \
+    Senior-Design-Project-3.cpp \
+    ../../libDaisy/src/hid/analog_switch.cpp
+	
 # Library Locations
 LIBDAISY_DIR = ../../libDaisy/
 DAISYSP_DIR = ../../DaisySP/

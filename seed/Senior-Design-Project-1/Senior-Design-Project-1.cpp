@@ -2,7 +2,7 @@
 #include "daisy_seed.h"
 #include "hid/encoder.h"
 #include "hid/limiter.h"
-#include "hid/analog_switch.h" // <--- New
+#include "hid/analog_switch.h" // 
 
 using namespace daisy;
 using namespace daisysp;
@@ -199,7 +199,7 @@ int main(void)
 
     // Analog switch:
     // ladder_out_pin MUST be the ADC-capable pin connected to the resistor ladder output.
-    dsy_gpio_pin ladder_out_pin = hw.GetPin(15); // <-- change this if your hardware uses a different pin
+    dsy_gpio_pin ladder_out_pin = hw.GetPin(15); // 
     analog_sw.Init(&hw, ladder_out_pin);
 
     hw.StartAudio(AudioCallback);
