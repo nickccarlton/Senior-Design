@@ -1,8 +1,8 @@
 #include "daisysp.h"
 #include "daisy_seed.h"
 #include "hid/encoder.h"
-#include "hid/switch.h"
 #include "hid/limiter.h"
+#include "hid/analog_switch.h" // <--- New
 
 using namespace daisy;
 using namespace daisysp;
@@ -17,11 +17,12 @@ static Encoder enc1; // LPF cutoff
 static Encoder enc2; // Reverb feedback
 static Encoder enc3; // Overdrive drive
 
-// Switches: 
-static Switch sw_overdrive; // Switch 4: Overdrive on/off
-static Switch sw_reverb;    // Switch 1: Reverb on/off
-static Switch sw_comp_mode; // Switch 2: Compressor threshold Low/High
-static Switch sw_comp_on;   // Switch 3: Compressor on/off
+// Analog switch (4 bits from 1 ADC pin)
+// bit 0 (SW4) = Reverb on/off
+// bit 1 (SW5) = Comp threshold Low/High
+// bit 2 (SW6) = Comp on/off
+// bit 3 (SW7) = Overdrive on/off
+static AnalogSwitch4 analog_sw;
 
 // Effects //
 static Compressor comp;
@@ -36,9 +37,9 @@ inline float clampf(float x, float lo, float hi)
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
-// --- Compressor (Switch 2: Low/High preset, Switch 3: on/off)
+// --- Compressor (Switch bit1: Low/High preset, bit2: on/off)
 const float   COMP_THR_LOW    = -120.0f; // Low preset
-const float   COMP_THR_HIGH   = -80.0f; // High preset
+const float   COMP_THR_HIGH   = -80.0f;  // High preset
 float         comp_thresh_db  = COMP_THR_HIGH;
 volatile bool comp_on         = true;
 
@@ -60,23 +61,22 @@ const float VERB_FB_MIN   = 0.60f;
 const float VERB_FB_MAX   = 0.90f;
 const float VERB_FB_STEP  = 0.05f; // 0.05 per tick
 
-// --- Effects on/off 
-volatile bool overdrive_on  = true; // Switch 4
-volatile bool reverb_on     = true; // Switch 1
+// --- Effects on/off (driven by analog switch bits)
+volatile bool overdrive_on  = true; // bit 3
+volatile bool reverb_on     = true; // bit 0
 
 // Audio Callback
 static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
                           AudioHandle::InterleavingOutputBuffer out,
                           size_t                                size)
 {
-    // Read controls 
+    // Read encoders (mechanical)
     enc1.Debounce();
     enc2.Debounce();
     enc3.Debounce();
-    sw_overdrive.Debounce();
-    sw_reverb.Debounce();
-    sw_comp_mode.Debounce();
-    sw_comp_on.Debounce();
+
+    // Read analog switch (4 bits via ADC)
+    analog_sw.Debounce();
 
     // Encoder increments
     int d1 = enc1.Increment();
@@ -104,11 +104,19 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
         drive.SetDrive(drive_amt);
     }
 
-    // === Switch states ===
-    comp_on   = sw_comp_on.Pressed();    // Switch 3: Compressor on/off
-    // Switch 2: Compressor threshold Low/High
+    // === Analog switch bits ===
+    // bit 0 (idx 0) = Reverb on/off
+    // bit 1 (idx 1) = Comp threshold Low/High
+    // bit 2 (idx 2) = Comp on/off
+    // bit 3 (idx 3) = Overdrive on/off
+
+    reverb_on    = analog_sw.Pressed(0); // Reverb on/off
+    bool comp_low  = analog_sw.Pressed(1); // Threshold Low/High
+    comp_on      = analog_sw.Pressed(2); // Compressor on/off
+    overdrive_on = analog_sw.Pressed(3); // Overdrive on/off
+
+    // Compressor threshold preset
     {
-        bool  comp_low    = sw_comp_mode.Pressed();
         float desired_thr = comp_low ? COMP_THR_LOW : COMP_THR_HIGH;
         if(desired_thr != comp_thresh_db)
         {
@@ -116,10 +124,6 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
             comp.SetThreshold(comp_thresh_db);
         }
     }
-
-    // 
-    reverb_on    = sw_reverb.Pressed();     // Switch 1  Reverb on/off
-    overdrive_on = sw_overdrive.Pressed();  // Switch 4  Overdrive on/off
 
     // Process audio
     for(size_t i = 0; i < size; i += 2)
@@ -149,9 +153,7 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
             outR = wetR;
         }
 
-        out[i]     = outL;
-        out[i] = outR;
- // 5) Limiter 
+        // 5) Limiter (per sample, mono/mono)
         limiter.ProcessBlock(&outL, 1, 1.0f);
         limiter.ProcessBlock(&outR, 1, 1.0f);
 
@@ -160,9 +162,7 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
     }
 }
 
-
 // Main
-
 int main(void)
 {
     hw.Configure();
@@ -189,19 +189,18 @@ int main(void)
     verb.Init(sr);
     verb.SetFeedback(verb_fb);
     verb.SetLpFreq(18000.0f);
-     limiter.Init();
 
-    // Controls init
+    limiter.Init();
+
     // Encoders:
-    enc1.Init(hw.GetPin(1),  hw.GetPin(2),  Pin()); // LPF cutoff
+    enc1.Init(hw.GetPin(2),  hw.GetPin(1),  Pin()); // LPF cutoff
     enc2.Init(hw.GetPin(3),  hw.GetPin(4),  Pin()); // Reverb feedback
-    enc3.Init(hw.GetPin(5),  hw.GetPin(6),  Pin()); // Overdrive drive
+    enc3.Init(hw.GetPin(6),  hw.GetPin(5),  Pin()); // Overdrive drive
 
-    // Switches:
-    sw_overdrive.Init(hw.GetPin(26)); // Switch 4: Overdrive on/off
-    sw_reverb.Init(hw.GetPin(27));    // Switch 1: Reverb on/off
-    sw_comp_mode.Init(hw.GetPin(28)); // Switch 2: Comp Threshold Low/High
-    sw_comp_on.Init(hw.GetPin(29));   // Switch 3: Compressor on/off
+    // Analog switch:
+    // ladder_out_pin MUST be the ADC-capable pin connected to the resistor ladder output.
+    dsy_gpio_pin ladder_out_pin = hw.GetPin(15); // <-- change this if your hardware uses a different pin
+    analog_sw.Init(&hw, ladder_out_pin);
 
     hw.StartAudio(AudioCallback);
 

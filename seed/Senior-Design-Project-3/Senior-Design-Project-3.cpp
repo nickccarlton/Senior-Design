@@ -171,3 +171,5 @@ int main(void)
     hw.StartAudio(AudioCallback);
     while (1) { System::Delay(1); }
 }
+
+////// IF sound is too noisy, adjust COMPRESSOR (ENC2 )encoder!!///
