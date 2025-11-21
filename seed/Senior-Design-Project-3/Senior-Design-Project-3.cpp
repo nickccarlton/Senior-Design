@@ -94,7 +94,7 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
         comp.SetRelease(comp_rel_sec);
     }
 
-    // === Reverb feedback (High / Low 선택) ===
+    // === Reverb feedback (High / Low ) ===
     float desired_fb = rev_hi_fb ? verb_fb_high : verb_fb_low;
     if(desired_fb != verb_fb)
     {
