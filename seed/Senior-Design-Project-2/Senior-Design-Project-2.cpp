@@ -12,18 +12,18 @@ using namespace daisysp;
 // =========================
 static DaisySeed hw;
 
-// Encoders with push buttons
-static Encoder enc1; // Push: Switch to Chain 1
-static Encoder enc2;
-static Encoder enc3; // Push: Switch to Chain 3
+// Encoders with pushbuttons
+static Encoder enc1; // Push → Chain1
+static Encoder enc2; // Push → Chain2 (Chorus)
+static Encoder enc3; // Push → Chain3
 
-// Analog switch (4 bits from 1 ADC pin)
+// Analog switch (4-bit ladder)
 static AnalogSwitch4 analog_sw;
 
 // =========================
-// Shared Reverb (Only ONE)
+// Shared Reverb
 // =========================
-static ReverbSc verb;          // <--
+static ReverbSc verb;
 static daisysp::Limiter limiter1;
 
 // =========================
@@ -33,13 +33,24 @@ static Compressor comp1;
 static Svf        lpf1;
 static Overdrive  drive1;
 
-// Chain3 Effects ()
+// =========================
+// Chain 2 Effects (Chorus)
+// =========================
+static Chorus chorus2;
+
+float ch2_freq  = 0.33f;
+float ch2_depth = 1.0f;
+float ch2_delay = 0.75f;
+
+// =========================
+// Chain 3 Effects
+// =========================
 static Compressor comp3;
 
 // =========================
 // Chain Selection
 // =========================
-volatile int active_chain = 1; // 1 = Chain1, 3 = Chain3
+volatile int active_chain = 1; // 1 = CH1, 2 = CH2, 3 = CH3
 
 inline float clampf(float x, float lo, float hi)
 {
@@ -61,7 +72,7 @@ const float LPF_STEP_HZ_1   = 100.0f;
 
 float       drive_amt_1     = 0.4f;
 const float DRIVE_MIN_1     = 0.1f;
-const float DRIVE_MAX_1     = 0.4f;
+const float DRIVE_MAX_1     = 0.5f;
 const float DRIVE_STEP_1    = 0.05f;
 
 float       verb_fb_1       = 0.8f;
@@ -76,13 +87,13 @@ volatile bool reverb_on_1    = true;
 // Chain 3 Parameters
 // =========================
 float verb_fb_low_3   = 0.70f;
-float verb_fb_high_3  = 0.85f;
+float verb_fb_high_3  = 0.9f;
 float verb_fb_3       = verb_fb_high_3;
 
 float verb_lpf_hz_3   = 12000.0f;
 const float LPF_MIN_3 = 3000.0f;
 const float LPF_MAX_3 = 18000.0f;
-const float LPF_STP_3 = 500.0f;
+const float LPF_STP_3 = 1000.0f;
 
 float comp_thr_db_3    = -40.0f;
 const float CTHR_MIN_3 = -80.0f;
@@ -99,14 +110,13 @@ volatile bool sidechain_on_3 = true;
 volatile bool reverb_on_3    = true;
 volatile bool rev_hi_fb_3    = true;
 
-// =========================
+// =======================================================
 // Process Chain 1
-// =========================
+// =======================================================
 void ProcessChain1(AudioHandle::InterleavingInputBuffer in,
                    AudioHandle::InterleavingOutputBuffer out,
                    size_t size)
 {
-    // Chain1 전용 Reverb 설정
     verb.SetFeedback(verb_fb_1);
     verb.SetLpFreq(18000.0f);
 
@@ -142,9 +152,35 @@ void ProcessChain1(AudioHandle::InterleavingInputBuffer in,
     }
 }
 
-// =========================
+// =======================================================
+// Process Chain 2 (Chorus)
+// =======================================================
+void ProcessChain2(AudioHandle::InterleavingInputBuffer in,
+                   AudioHandle::InterleavingOutputBuffer out,
+                   size_t size)
+{
+    for(size_t i = 0; i < size; i += 2)
+    {
+        float dry = in[i];
+
+        chorus2.Process(dry);
+
+        float L = chorus2.GetLeft();
+        float R = chorus2.GetRight();
+                // ====== BOOST CHORUS OUTPUT HERE ======
+        const float ch2_gain = 12.0f;   //  
+        L *= ch2_gain;
+        R *= ch2_gain;
+        // ======================================
+
+        out[i]     = L;
+        out[i + 1] = R;
+    }
+}
+
+// =======================================================
 // Process Chain 3
-// =========================
+// =======================================================
 void ProcessChain3(AudioHandle::InterleavingInputBuffer in,
                    AudioHandle::InterleavingOutputBuffer out,
                    size_t size)
@@ -160,9 +196,7 @@ void ProcessChain3(AudioHandle::InterleavingInputBuffer in,
         float wetL = inL, wetR = inL;
 
         if(reverb_on_3)
-        {
             verb.Process(inL, inL, &wetL, &wetR);
-        }
 
         float mono = reverb_on_3 ? 0.5f * (wetL + wetR) : inL;
 
@@ -183,9 +217,9 @@ void ProcessChain3(AudioHandle::InterleavingInputBuffer in,
     }
 }
 
-// =========================
-// AudioCallback
-// =========================
+// =======================================================
+// Audio Callback
+// =======================================================
 static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
                           AudioHandle::InterleavingOutputBuffer out,
                           size_t                                size)
@@ -195,10 +229,14 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
     enc3.Debounce();
     analog_sw.Debounce();
 
+    // ===== Chain Switching =====
     if(enc1.RisingEdge()) active_chain = 1;
+    if(enc2.RisingEdge()) active_chain = 2;
     if(enc3.RisingEdge()) active_chain = 3;
 
-    // Controls
+    // =====================================================
+    // Chain 1 Controls
+    // =====================================================
     if(active_chain == 1)
     {
         int d1 = enc1.Increment();
@@ -237,7 +275,43 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
             comp1.SetThreshold(comp_thresh_db_1);
         }
     }
-    else // Chain3
+
+    // =====================================================
+    // Chain 2 - Chorus Controls
+    // =====================================================
+    else if(active_chain == 2)
+    {
+        int d1 = enc1.Increment();
+        int d2 = enc2.Increment();
+        int d3 = enc3.Increment();
+
+        //  sensitivity
+        if(d1)
+        {
+            ch2_freq += d1 * 0.1f;
+            ch2_freq = clampf(ch2_freq, 0.05f, 12.0f);
+            chorus2.SetLfoFreq(ch2_freq, ch2_freq * 0.6f);
+        }
+
+        if(d2)
+        {
+            ch2_depth += d2 * 0.05f;
+            ch2_depth = clampf(ch2_depth, 0.0f, 1.2f);
+            chorus2.SetLfoDepth(ch2_depth, ch2_depth);
+        }
+
+        if(d3)
+        {
+            ch2_delay += d3 * 0.05f;
+            ch2_delay = clampf(ch2_delay, 0.05f, 2.0f);
+            chorus2.SetDelay(ch2_delay, ch2_delay * 1.2f);
+        }
+    }
+
+    // =====================================================
+    // Chain 3 Controls
+    // =====================================================
+    else if(active_chain == 3)
     {
         int d1 = enc1.Increment();
         int d2 = enc2.Increment();
@@ -270,20 +344,23 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
 
         float desired_fb = rev_hi_fb_3 ? verb_fb_high_3 : verb_fb_low_3;
         if(desired_fb != verb_fb_3)
-        {
             verb_fb_3 = desired_fb;
-        }
     }
 
+    // =====================================================
+    // Chain Processing
+    // =====================================================
     if(active_chain == 1)
         ProcessChain1(in, out, size);
+    else if(active_chain == 2)
+        ProcessChain2(in, out, size);
     else
         ProcessChain3(in, out, size);
 }
 
-// =========================
+// =======================================================
 // Main
-// =========================
+// =======================================================
 int main(void)
 {
     hw.Configure();
@@ -311,6 +388,12 @@ int main(void)
 
     limiter1.Init();
 
+    // Chain2 Chorus Init
+    chorus2.Init(sr);
+    chorus2.SetLfoFreq(ch2_freq, ch2_freq * 0.6f);
+    chorus2.SetLfoDepth(ch2_depth, ch2_depth);
+    chorus2.SetDelay(ch2_delay, ch2_delay * 1.2f);
+
     // Chain3 DSP init
     comp3.Init(sr);
     comp3.SetThreshold(comp_thr_db_3);
@@ -318,12 +401,12 @@ int main(void)
     comp3.SetAttack(0.005f);
     comp3.SetRelease(comp_rel_sec_3);
 
-    // Encoders + Push Buttons
+    // Encoders
     enc1.Init(hw.GetPin(2), hw.GetPin(1), hw.GetPin(7));
-    enc2.Init(hw.GetPin(4), hw.GetPin(3), hw.GetPin(8));
+    enc2.Init(hw.GetPin(3), hw.GetPin(4), hw.GetPin(8));
     enc3.Init(hw.GetPin(6), hw.GetPin(5), hw.GetPin(9));
 
-    // Analog ladder switch
+    // Analog switch
     analog_sw.Init(&hw, hw.GetPin(15));
 
     hw.StartAudio(AudioCallback);
